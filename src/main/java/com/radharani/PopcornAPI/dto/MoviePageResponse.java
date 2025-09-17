@@ -6,7 +6,7 @@ package com.cinema.dto;
 import java.util.List;
 
 /**
- * @author vikash katiyar
+ * @author Prahlad Yadav
  *
  */
 public record MoviePageResponse(List<MovieDto> movieDtos, Integer pageNumber, Integer pageSize, long totalElements,
