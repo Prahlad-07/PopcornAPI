@@ -649,8 +649,8 @@ We welcome contributions to PopcornAPI! Here's how you can help:
 
 ### 🌟 Ways to Contribute
 
-- 🐛 **Bug Reports**: Found a bug? [Open an issue](https://github.com/your-username/PopcornAPI/issues)
-- 💡 **Feature Requests**: Have an idea? [Suggest a feature](https://github.com/your-username/PopcornAPI/issues)
+- 🐛 **Bug Reports**: Found a bug? [Open an issue](https://github.com/Prahlad-7/PopcornAPI/issues)
+- 💡 **Feature Requests**: Have an idea? [Suggest a feature](https://github.com/Prahlad-7/PopcornAPI/issues)
 - 📝 **Documentation**: Improve our docs
 - 🔧 **Code**: Submit pull requests
 
@@ -692,9 +692,9 @@ We welcome contributions to PopcornAPI! Here's how you can help:
 
 ### 📧 Contact
 
-- **Email**: your.email@example.com
-- **LinkedIn**: [Your LinkedIn](https://linkedin.com/in/your-profile)
-- **Twitter**: [@your_handle](https://twitter.com/your_handle)
+- **Email**: prahlady444@gmail.com
+- **LinkedIn**: [ LinkedIn](https://www.linkedin.com/in/prahlad-yadav-478040257/)
+- **Twitter**: [@prahlad-07](https://twitter.com/your_handle)
 
 ---
 
