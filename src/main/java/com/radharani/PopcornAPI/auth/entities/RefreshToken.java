@@ -18,7 +18,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * @author vikash katiyar
+ *
  *
  */
 @Entity
