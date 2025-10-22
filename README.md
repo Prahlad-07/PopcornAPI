@@ -1,4 +1,4 @@
-# 🍿 PopcornAPI - Movie Management Backend
+# 🍿 Film Info Service Backend
 
 <div align="center">
 
@@ -26,7 +26,7 @@
 
 - [✨ Features](#-features)
 - [🛠️ Tech Stack](#️-tech-stack)
-- [🏗️ Architecture](#️-architecture)
+- [🏗️ System Architecture](#️-system-architecture)
 - [🚀 Quick Start](#-quick-start)
 - [⚙️ Installation](#️-installation)
 - [📖 API Documentation](#-api-documentation)
@@ -94,54 +94,594 @@
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ System Architecture
+
+### High-Level Architecture Diagram
 
 ```mermaid
 graph TB
-    Client[Client Applications] --> Controller[Controller Layer]
-    Controller --> Service[Service Layer]
-    Service --> Repository[Repository Layer]
-    Repository --> Database[(MySQL Database)]
+    subgraph "Client Layer"
+        WebClient[Web Browser]
+        MobileClient[Mobile App]
+        APIClient[API Consumer]
+    end
     
-    Controller --> Security[Spring Security]
-    Security --> JWT[JWT Token Service]
+    subgraph "Application Layer"
+        subgraph "Spring Boot Application"
+            Controller[Controller Layer<br/>REST Endpoints]
+            Security[Spring Security<br/>JWT Authentication]
+            Service[Service Layer<br/>Business Logic]
+            Repository[Repository Layer<br/>Data Access]
+        end
+        
+        FileService[File Service<br/>Poster Management]
+        JWTUtil[JWT Utility<br/>Token Management]
+    end
     
-    Controller --> FileService[File Service]
-    FileService --> Storage[File Storage]
+    subgraph "Data Layer"
+        MySQL[(MySQL Database<br/>Port: 3306)]
+        FileStorage[File Storage<br/>./uploads]
+    end
     
-    subgraph "Three-Layered Architecture"
-        Controller
-        Service
-        Repository
+    WebClient -->|HTTP/REST| Controller
+    MobileClient -->|HTTP/REST| Controller
+    APIClient -->|HTTP/REST| Controller
+    
+    Controller -->|Validate Token| Security
+    Security -->|Check Auth| JWTUtil
+    Controller -->|Business Logic| Service
+    Service -->|CRUD Operations| Repository
+    Repository -.->|SQL Queries| MySQL
+    
+    Controller -->|Upload/Retrieve| FileService
+    FileService -.->|Store/Read| FileStorage
+    
+    style Controller fill:#4CAF50,color:#fff
+    style Security fill:#FF9800,color:#fff
+    style Service fill:#2196F3,color:#fff
+    style Repository fill:#9C27B0,color:#fff
+    style FileService fill:#00BCD4,color:#fff
+    style JWTUtil fill:#FF5722,color:#fff
+    style MySQL fill:#f0f0f0
+    style FileStorage fill:#f0f0f0
+```
+
+### Three-Layered Architecture Pattern
+
+```mermaid
+graph LR
+    subgraph "Presentation Layer"
+        MC[Movie Controller]
+        AC[Auth Controller]
+        FC[File Controller]
+    end
+    
+    subgraph "Business Layer"
+        MS[Movie Service]
+        AS[Auth Service]
+        FS[File Service]
+    end
+    
+    subgraph "Data Layer"
+        MR[Movie Repository]
+        UR[User Repository]
+    end
+    
+    MC --> MS
+    AC --> AS
+    FC --> FS
+    
+    MS --> MR
+    AS --> UR
+    
+    MR -.-> DB[(MySQL)]
+    UR -.-> DB
+    
+    style MC fill:#4CAF50,color:#fff
+    style AC fill:#4CAF50,color:#fff
+    style FC fill:#4CAF50,color:#fff
+    style MS fill:#2196F3,color:#fff
+    style AS fill:#2196F3,color:#fff
+    style FS fill:#2196F3,color:#fff
+    style MR fill:#9C27B0,color:#fff
+    style UR fill:#9C27B0,color:#fff
+```
+
+### Component Interaction Diagram
+
+```mermaid
+graph TB
+    subgraph "Security Components"
+        JWTFilter[JWT Filter]
+        AuthProvider[Auth Provider]
+        SecurityConfig[Security Config]
+    end
+    
+    subgraph "Core Components"
+        MovieCtrl[Movie Controller]
+        AuthCtrl[Auth Controller]
+        MovieSvc[Movie Service]
+        AuthSvc[Auth Service]
+    end
+    
+    subgraph "Data Components"
+        MovieRepo[Movie Repository]
+        UserRepo[User Repository]
+        JPA[JPA/Hibernate]
+    end
+    
+    JWTFilter -->|Validate| AuthProvider
+    SecurityConfig -->|Configure| JWTFilter
+    
+    MovieCtrl -->|Protected Routes| JWTFilter
+    AuthCtrl -->|Login/Register| AuthSvc
+    MovieCtrl -->|Business Logic| MovieSvc
+    
+    AuthSvc -->|User Operations| UserRepo
+    MovieSvc -->|Movie Operations| MovieRepo
+    
+    MovieRepo -->|ORM| JPA
+    UserRepo -->|ORM| JPA
+    JPA -.->|JDBC| MySQL[(MySQL)]
+    
+    style JWTFilter fill:#FF9800,color:#fff
+    style MovieCtrl fill:#4CAF50,color:#fff
+    style AuthCtrl fill:#4CAF50,color:#fff
+    style MovieSvc fill:#2196F3,color:#fff
+    style AuthSvc fill:#2196F3,color:#fff
+    style MovieRepo fill:#9C27B0,color:#fff
+    style UserRepo fill:#9C27B0,color:#fff
+```
+
+---
+
+## 🔄 Request Flow Diagrams
+
+### Movie Creation Flow (with File Upload)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client
+    participant Controller as Movie Controller
+    participant Security as JWT Filter
+    participant Service as Movie Service
+    participant FileService as File Service
+    participant Repository as Movie Repository
+    participant DB as MySQL Database
+    participant Storage as File Storage
+    
+    Client->>Controller: POST /api/v1/movie/add-movie<br/>(multipart/form-data + JWT)
+    activate Controller
+    
+    Controller->>Security: Validate JWT Token
+    activate Security
+    Security->>Security: Extract User Info
+    Security-->>Controller: User Authenticated
+    deactivate Security
+    
+    Controller->>FileService: Save Poster File
+    activate FileService
+    FileService->>Storage: Write File to Disk
+    Storage-->>FileService: File Path
+    FileService-->>Controller: Poster Filename
+    deactivate FileService
+    
+    Controller->>Service: createMovie(movieDto)
+    activate Service
+    Service->>Service: Validate Movie Data
+    Service->>Repository: save(movie)
+    activate Repository
+    Repository->>DB: INSERT INTO movies
+    DB-->>Repository: Movie Entity
+    Repository-->>Service: Saved Movie
+    deactivate Repository
+    Service-->>Controller: MovieDto
+    deactivate Service
+    
+    Controller-->>Client: 201 Created (MovieDto)
+    deactivate Controller
+```
+
+### Authentication & Authorization Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client
+    participant AuthCtrl as Auth Controller
+    participant AuthSvc as Auth Service
+    participant UserRepo as User Repository
+    participant DB as MySQL
+    participant JWTUtil as JWT Utility
+    participant BCrypt
+    
+    rect rgb(240, 248, 255)
+        Note over Client,BCrypt: Registration Flow
+        Client->>AuthCtrl: POST /auth/register
+        activate AuthCtrl
+        AuthCtrl->>AuthSvc: register(userDto)
+        activate AuthSvc
+        AuthSvc->>BCrypt: encodePassword()
+        BCrypt-->>AuthSvc: Hashed Password
+        AuthSvc->>UserRepo: save(user)
+        activate UserRepo
+        UserRepo->>DB: INSERT INTO users
+        DB-->>UserRepo: User Entity
+        UserRepo-->>AuthSvc: Saved User
+        deactivate UserRepo
+        AuthSvc-->>AuthCtrl: Success Response
+        AuthCtrl-->>Client: 201 Created
+        deactivate AuthSvc
+        deactivate AuthCtrl
+    end
+    
+    rect rgb(255, 250, 240)
+        Note over Client,JWTUtil: Login Flow
+        Client->>AuthCtrl: POST /auth/login
+        activate AuthCtrl
+        AuthCtrl->>AuthSvc: login(credentials)
+        activate AuthSvc
+        AuthSvc->>UserRepo: findByUsername()
+        activate UserRepo
+        UserRepo->>DB: SELECT FROM users
+        DB-->>UserRepo: User Data
+        UserRepo-->>AuthSvc: User Entity
+        deactivate UserRepo
+        AuthSvc->>BCrypt: matches(password)
+        BCrypt-->>AuthSvc: Validation Result
+        AuthSvc->>JWTUtil: generateToken(user)
+        activate JWTUtil
+        JWTUtil->>JWTUtil: Create JWT Claims
+        JWTUtil->>JWTUtil: Sign Token
+        JWTUtil-->>AuthSvc: JWT Token
+        deactivate JWTUtil
+        AuthSvc-->>AuthCtrl: AuthResponse + Token
+        AuthCtrl-->>Client: 200 OK (JWT Token)
+        deactivate AuthSvc
+        deactivate AuthCtrl
     end
 ```
 
-### 📁 Project Structure
+### Get All Movies with Pagination Flow
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client
+    participant Controller as Movie Controller
+    participant Security as JWT Filter
+    participant Service as Movie Service
+    participant Repository as Movie Repository
+    participant DB as MySQL
+    
+    Client->>Controller: GET /api/v1/movie/allMoviesPage<br/>?pageNumber=0&pageSize=10<br/>(JWT Token)
+    activate Controller
+    
+    Controller->>Security: Validate JWT Token
+    activate Security
+    Security-->>Controller: Valid
+    deactivate Security
+    
+    Controller->>Service: getAllMoviesPage(pageNumber, pageSize)
+    activate Service
+    Service->>Service: Create Pageable Object
+    Service->>Repository: findAll(pageable)
+    activate Repository
+    Repository->>DB: SELECT * FROM movies<br/>LIMIT 10 OFFSET 0
+    DB-->>Repository: Page<Movie>
+    Repository-->>Service: Movie Page
+    deactivate Repository
+    Service->>Service: Convert to DTOs
+    Service-->>Controller: MoviePageResponse
+    deactivate Service
+    
+    Controller-->>Client: 200 OK (Paginated Response)
+    deactivate Controller
 ```
-src/main/java/com/popcornapi/
-├── 🎯 controller/          # REST API endpoints
-│   ├── MovieController.java
-│   ├── AuthController.java
-│   └── FileController.java
-├── 💼 service/             # Business logic layer
-│   ├── MovieService.java
-│   ├── AuthService.java
-│   └── FileService.java
-├── 🗄️ repository/          # Data access layer
-│   ├── MovieRepository.java
-│   └── UserRepository.java
-├── 🏛️ entity/              # JPA entities
-│   ├── Movie.java
-│   └── User.java
-├── ⚙️ config/              # Configuration classes
-│   ├── SecurityConfig.java
-│   └── JwtConfig.java
-├── 📋 dto/                 # Data Transfer Objects
-│   ├── MovieDto.java
-│   └── AuthDto.java
-└── ⚠️ exception/           # Custom exceptions
-    └── GlobalExceptionHandler.java
+
+### File Retrieval Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client
+    participant FileCtrl as File Controller
+    participant FileSvc as File Service
+    participant Storage as File Storage
+    
+    Client->>FileCtrl: GET /file/{filename}
+    activate FileCtrl
+    
+    FileCtrl->>FileSvc: getFile(filename)
+    activate FileSvc
+    FileSvc->>Storage: Read File
+    activate Storage
+    Storage-->>FileSvc: File Bytes
+    deactivate Storage
+    FileSvc->>FileSvc: Determine Content Type
+    FileSvc-->>FileCtrl: Resource + ContentType
+    deactivate FileSvc
+    
+    FileCtrl-->>Client: 200 OK (Image File)
+    deactivate FileCtrl
+```
+
+---
+
+## 📊 Database Schema
+
+### Entity Relationship Diagram
+
+```mermaid
+erDiagram
+    USERS ||--o{ MOVIES : manages
+    USERS {
+        bigint id PK
+        varchar name
+        varchar username UK
+        varchar email UK
+        varchar password
+        varchar role
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    MOVIES {
+        bigint id PK
+        varchar title
+        varchar director
+        varchar studio
+        varchar movie_cast
+        integer release_year
+        varchar poster
+        bigint created_by FK
+        timestamp created_at
+        timestamp updated_at
+    }
+```
+
+### Detailed Schema Diagram
+
+```mermaid
+graph TB
+    subgraph "Users Table"
+        U1[id: BIGINT PK AUTO_INCREMENT]
+        U2[name: VARCHAR 100]
+        U3[username: VARCHAR 50 UNIQUE]
+        U4[email: VARCHAR 100 UNIQUE]
+        U5[password: VARCHAR 255]
+        U6[role: VARCHAR 20]
+        U7[created_at: TIMESTAMP]
+        U8[updated_at: TIMESTAMP]
+    end
+    
+    subgraph "Movies Table"
+        M1[id: BIGINT PK AUTO_INCREMENT]
+        M2[title: VARCHAR 255 NOT NULL]
+        M3[director: VARCHAR 100 NOT NULL]
+        M4[studio: VARCHAR 100]
+        M5[movie_cast: TEXT]
+        M6[release_year: INT]
+        M7[poster: VARCHAR 255]
+        M8[created_by: BIGINT FK]
+        M9[created_at: TIMESTAMP]
+        M10[updated_at: TIMESTAMP]
+    end
+    
+    U1 -.->|Foreign Key| M8
+    
+    style U1 fill:#9C27B0,color:#fff
+    style M1 fill:#2196F3,color:#fff
+    style M8 fill:#FF9800,color:#fff
+```
+
+### Data Flow in Repository Layer
+
+```mermaid
+graph LR
+    subgraph "Application Layer"
+        Service[Service Layer]
+    end
+    
+    subgraph "Data Access Layer"
+        Repo[JPA Repository]
+        EntityMgr[Entity Manager]
+    end
+    
+    subgraph "ORM Layer"
+        Hibernate[Hibernate ORM]
+        Cache[Second Level Cache]
+    end
+    
+    subgraph "Database"
+        MySQL[(MySQL Database)]
+    end
+    
+    Service -->|CRUD Operations| Repo
+    Repo -->|JPA API| EntityMgr
+    EntityMgr -->|Persistence Context| Hibernate
+    Hibernate -->|Check Cache| Cache
+    Cache -.->|Cache Miss| MySQL
+    Hibernate -->|JDBC| MySQL
+    
+    style Service fill:#2196F3,color:#fff
+    style Repo fill:#9C27B0,color:#fff
+    style Hibernate fill:#00BCD4,color:#fff
+    style Cache fill:#FFC107
+```
+
+---
+
+## 🔐 Authentication Architecture
+
+### JWT Security Architecture
+
+```mermaid
+graph TB
+    subgraph "Security Layer"
+        Filter[JWT Authentication Filter]
+        Provider[Authentication Provider]
+        UserDetails[UserDetails Service]
+    end
+    
+    subgraph "JWT Components"
+        JWTUtil[JWT Utility]
+        TokenStore[Token Store]
+    end
+    
+    subgraph "Security Config"
+        WebSecurity[Web Security Config]
+        CORS[CORS Configuration]
+        CSRF[CSRF Protection]
+    end
+    
+    Request[HTTP Request] -->|1. Intercept| Filter
+    Filter -->|2. Extract Token| JWTUtil
+    JWTUtil -->|3. Validate| TokenStore
+    Filter -->|4. Load User| UserDetails
+    UserDetails -->|5. Authenticate| Provider
+    Provider -->|6. Set Security Context| Filter
+    Filter -->|7. Continue| Controller[Protected Controller]
+    
+    WebSecurity -->|Configure| Filter
+    WebSecurity -->|Enable| CORS
+    WebSecurity -->|Disable| CSRF
+    
+    style Filter fill:#FF9800,color:#fff
+    style JWTUtil fill:#FF5722,color:#fff
+    style Provider fill:#9C27B0,color:#fff
+    style Controller fill:#4CAF50,color:#fff
+```
+
+### Token Generation & Validation Flow
+
+```mermaid
+graph TB
+    subgraph "Token Generation"
+        A[User Credentials] -->|Login| B[Authenticate]
+        B -->|Success| C[Create Claims]
+        C -->|Add User Info| D[Set Expiration]
+        D -->|Sign with Secret| E[JWT Token]
+    end
+    
+    subgraph "Token Validation"
+        F[Incoming Request] -->|Extract Token| G[Parse JWT]
+        G -->|Verify Signature| H{Valid?}
+        H -->|Yes| I[Check Expiration]
+        H -->|No| J[Reject Request]
+        I -->|Not Expired| K[Extract User]
+        I -->|Expired| J
+        K -->|Load from DB| L[Authenticate User]
+    end
+    
+    E -.->|Store in Client| F
+    
+    style E fill:#4CAF50,color:#fff
+    style K fill:#2196F3,color:#fff
+    style J fill:#f44336,color:#fff
+```
+
+### Role-Based Access Control
+
+```mermaid
+graph TB
+    subgraph "User Roles"
+        Admin[ADMIN Role]
+        User[USER Role]
+        Guest[GUEST Role]
+    end
+    
+    subgraph "Endpoints"
+        subgraph "Public"
+            Login[POST /auth/login]
+            Register[POST /auth/register]
+        end
+        
+        subgraph "User Protected"
+            GetMovies[GET /movie/all]
+            GetMovie[GET /movie/:id]
+            GetPoster[GET /file/:filename]
+        end
+        
+        subgraph "Admin Protected"
+            AddMovie[POST /movie/add-movie]
+            UpdateMovie[PUT /movie/update/:id]
+            DeleteMovie[DELETE /movie/delete/:id]
+        end
+    end
+    
+    Admin -->|Full Access| AddMovie
+    Admin -->|Full Access| UpdateMovie
+    Admin -->|Full Access| DeleteMovie
+    Admin -->|Access| GetMovies
+    
+    User -->|Read Access| GetMovies
+    User -->|Read Access| GetMovie
+    User -->|Access| GetPoster
+    
+    Guest -->|No Auth| Login
+    Guest -->|No Auth| Register
+    
+    style Admin fill:#9C27B0,color:#fff
+    style User fill:#2196F3,color:#fff
+    style Guest fill:#607D8B,color:#fff
+    style AddMovie fill:#f44336,color:#fff
+    style UpdateMovie fill:#FF9800,color:#fff
+    style DeleteMovie fill:#f44336,color:#fff
+```
+
+---
+
+## 📁 Project Structure
+
+```mermaid
+graph TB
+    Root[PopcornAPI Root]
+    
+    Root --> SrcMain[src/main]
+    Root --> SrcTest[src/test]
+    Root --> POM[pom.xml]
+    Root --> README[README.md]
+    
+    SrcMain --> Java[java/com/popcornapi]
+    SrcMain --> Resources[resources]
+    
+    Java --> Controller[controller/]
+    Java --> Service[service/]
+    Java --> Repository[repository/]
+    Java --> Entity[entity/]
+    Java --> Config[config/]
+    Java --> DTO[dto/]
+    Java --> Exception[exception/]
+    Java --> Security[security/]
+    
+    Controller --> MovieCtrl[MovieController.java]
+    Controller --> AuthCtrl[AuthController.java]
+    Controller --> FileCtrl[FileController.java]
+    
+    Service --> MovieSvc[MovieService.java]
+    Service --> AuthSvc[AuthService.java]
+    Service --> FileSvc[FileService.java]
+    
+    Repository --> MovieRepo[MovieRepository.java]
+    Repository --> UserRepo[UserRepository.java]
+    
+    Entity --> Movie[Movie.java]
+    Entity --> User[User.java]
+    
+    Config --> SecConfig[SecurityConfig.java]
+    Config --> JWTConfig[JwtConfig.java]
+    Config --> WebConfig[WebConfig.java]
+    
+    Resources --> AppProps[application.properties]
+    Resources --> DataSQL[data.sql]
+    
+    style Root fill:#FFC107
+    style Controller fill:#4CAF50,color:#fff
+    style Service fill:#2196F3,color:#fff
+    style Repository fill:#9C27B0,color:#fff
+    style Config fill:#FF9800,color:#fff
 ```
 
 ---
@@ -154,10 +694,25 @@ src/main/java/com/popcornapi/
 - 🐬 **MySQL 8.0** or higher
 - 🔧 **Maven 3.6** or higher
 
+### Installation Workflow
+
+```mermaid
+graph LR
+    A[Clone Repository] --> B[Setup Database]
+    B --> C[Configure Properties]
+    C --> D[Build Project]
+    D --> E[Run Application]
+    E --> F[Verify API]
+    
+    style A fill:#4CAF50,color:#fff
+    style E fill:#2196F3,color:#fff
+    style F fill:#FF9800,color:#fff
+```
+
 ### 1️⃣ Clone & Navigate
 
 ```bash
-git clone https://github.com/your-username/PopcornAPI.git
+git clone https://github.com/Prahlad-7/PopcornAPI.git
 cd PopcornAPI
 ```
 
@@ -188,7 +743,7 @@ spring.jpa.show-sql=true
 spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQL8Dialect
 
 # JWT Configuration
-jwt.secret=your-secret-key
+jwt.secret=your-secret-key-must-be-at-least-256-bits
 jwt.expiration=86400000
 
 # File Upload Configuration
@@ -217,6 +772,37 @@ file.upload-dir=./uploads
 
 ## 📖 API Documentation
 
+### API Endpoint Map
+
+```mermaid
+graph TB
+    API[PopcornAPI Base URL<br/>http://localhost:8080]
+    
+    API --> Auth[/api/v1/auth]
+    API --> Movie[/api/v1/movie]
+    API --> File[/file]
+    
+    Auth --> Register[POST /register]
+    Auth --> Login[POST /login]
+    
+    Movie --> AddMovie[POST /add-movie 🔒]
+    Movie --> GetAll[GET /all 🔒]
+    Movie --> GetById[GET /:id 🔒]
+    Movie --> Update[PUT /update/:id 🔒]
+    Movie --> Delete[DELETE /delete/:id 🔒]
+    Movie --> Paginated[GET /allMoviesPage 🔒]
+    Movie --> Sorted[GET /allMoviesPageSort 🔒]
+    
+    File --> GetPoster[GET /:filename]
+    
+    style API fill:#FFC107
+    style Auth fill:#9C27B0,color:#fff
+    style Movie fill:#4CAF50,color:#fff
+    style File fill:#2196F3,color:#fff
+    style Register fill:#00BCD4,color:#fff
+    style Login fill:#00BCD4,color:#fff
+```
+
 ### 🎬 Movie Endpoints
 
 <details>
@@ -235,6 +821,20 @@ Authorization: Bearer {token}
     "movieCast": "Keanu Reeves, Laurence Fishburne",
     "releaseYear": 1999,
     "poster": file
+}
+```
+
+**Response:**
+```json
+{
+    "id": 1,
+    "title": "The Matrix",
+    "director": "The Wachowskis",
+    "studio": "Warner Bros",
+    "movieCast": "Keanu Reeves, Laurence Fishburne",
+    "releaseYear": 1999,
+    "poster": "matrix-poster.jpg",
+    "posterUrl": "http://localhost:8080/file/matrix-poster.jpg"
 }
 ```
 
@@ -278,6 +878,18 @@ GET /api/v1/movie/allMoviesPage?pageNumber=0&pageSize=10
 Authorization: Bearer {token}
 ```
 
+**Response:**
+```json
+{
+    "content": [...],
+    "pageNumber": 0,
+    "pageSize": 10,
+    "totalElements": 50,
+    "totalPages": 5,
+    "last": false
+}
+```
+
 #### Sorted Movies
 ```http
 GET /api/v1/movie/allMoviesPageSort?sortBy=title&pageNumber=0&pageSize=10
@@ -304,6 +916,15 @@ Content-Type: application/json
 }
 ```
 
+**Response:**
+```json
+{
+    "message": "User registered successfully",
+    "userId": 1,
+    "username": "johndoe"
+}
+```
+
 #### Login User
 ```http
 POST /api/v1/auth/login
@@ -321,7 +942,9 @@ Content-Type: application/json
     "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "type": "Bearer",
     "username": "johndoe",
-    "email": "john@example.com"
+    "email": "john@example.com",
+    "role": "USER",
+    "expiresIn": 86400000
 }
 ```
 
@@ -339,403 +962,4 @@ GET /file/{filename}
 
 **Response:** Image file (JPEG, PNG, etc.)
 
-</details>
 
----
-
-## 🔧 Configuration
-
-### Environment Variables
-
-Create a `.env` file in the root directory:
-
-```env
-# Database
-DB_HOST=localhost
-DB_PORT=3306
-DB_NAME=popcorn_db
-DB_USERNAME=popcorn_user
-DB_PASSWORD=your_password
-
-# JWT
-JWT_SECRET=your-256-bit-secret-key
-JWT_EXPIRATION=86400000
-
-# File Upload
-UPLOAD_DIR=./uploads
-MAX_FILE_SIZE=10MB
-```
-
-### Application Profiles
-
-#### Development (`application-dev.properties`)
-```properties
-spring.jpa.show-sql=true
-logging.level.org.springframework.web=DEBUG
-logging.level.org.springframework.security=DEBUG
-```
-
-#### Production (`application-prod.properties`)
-```properties
-spring.jpa.show-sql=false
-logging.level.org.springframework.web=WARN
-logging.level.org.springframework.security=WARN
-server.error.include-stacktrace=never
-```
-
----
-
-## 📊 Database Schema
-
-```mermaid
-erDiagram
-    USERS {
-        bigint id PK
-        string name
-        string username UK
-        string email UK
-        string password
-        string role
-        timestamp created_at
-        timestamp updated_at
-    }
-    
-    MOVIES {
-        bigint id PK
-        string title
-        string director
-        string studio
-        string movie_cast
-        integer release_year
-        string poster
-        timestamp created_at
-        timestamp updated_at
-    }
-```
-
-### Movie Entity
-```java
-@Entity
-@Table(name = "movies")
-public class Movie {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-    
-    @NotBlank
-    @Column(nullable = false)
-    private String title;
-    
-    @NotBlank
-    private String director;
-    
-    private String studio;
-    
-    @Column(name = "movie_cast")
-    private String movieCast;
-    
-    @Column(name = "release_year")
-    private Integer releaseYear;
-    
-    private String poster;
-    
-    // Constructors, getters, setters...
-}
-```
-
----
-
-## 🔐 Authentication
-
-PopcornAPI uses **JWT (JSON Web Tokens)** for secure authentication and authorization.
-
-### Authentication Flow
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant AuthController
-    participant AuthService
-    participant JwtUtil
-    participant Database
-    
-    Client->>AuthController: POST /auth/login
-    AuthController->>AuthService: authenticate(credentials)
-    AuthService->>Database: findByUsername()
-    Database-->>AuthService: User details
-    AuthService->>AuthService: validatePassword()
-    AuthService->>JwtUtil: generateToken()
-    JwtUtil-->>AuthService: JWT token
-    AuthService-->>AuthController: AuthResponse
-    AuthController-->>Client: JWT token
-```
-
-### JWT Token Structure
-
-```json
-{
-  "header": {
-    "alg": "HS256",
-    "typ": "JWT"
-  },
-  "payload": {
-    "sub": "johndoe",
-    "iat": 1635724800,
-    "exp": 1635811200,
-    "roles": ["USER"]
-  },
-  "signature": "..."
-}
-```
-
-### Protected Endpoints
-
-All movie-related endpoints require authentication. Include the JWT token in the Authorization header:
-
-```http
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
-
----
-
-## 🧪 Testing
-
-### Running Tests
-
-```bash
-# Run all tests
-./mvnw test
-
-# Run specific test class
-./mvnw test -Dtest=MovieControllerTest
-
-# Run tests with coverage
-./mvnw test jacoco:report
-```
-
-### Test Structure
-
-```
-src/test/java/com/popcornapi/
-├── controller/
-│   ├── MovieControllerTest.java
-│   └── AuthControllerTest.java
-├── service/
-│   ├── MovieServiceTest.java
-│   └── AuthServiceTest.java
-└── repository/
-    └── MovieRepositoryTest.java
-```
-
-### Example Test
-
-```java
-@SpringBootTest
-@AutoConfigureMockMvc
-class MovieControllerTest {
-    
-    @Autowired
-    private MockMvc mockMvc;
-    
-    @MockBean
-    private MovieService movieService;
-    
-    @Test
-    @WithMockUser
-    void shouldGetAllMovies() throws Exception {
-        // Given
-        List<Movie> movies = Arrays.asList(
-            new Movie("The Matrix", "The Wachowskis")
-        );
-        when(movieService.getAllMovies()).thenReturn(movies);
-        
-        // When & Then
-        mockMvc.perform(get("/api/v1/movie/all"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$", hasSize(1)))
-            .andExpect(jsonPath("$[0].title", is("The Matrix")));
-    }
-}
-```
-
----
-
-## 📈 Performance
-
-### Optimization Features
-
-- **Database Indexing**: Optimized queries with proper indexing
-- **Pagination**: Efficient data retrieval for large datasets
-- **Connection Pooling**: HikariCP for database connection management
-- **Caching**: Strategic caching for frequently accessed data
-
-### Performance Metrics
-
-```mermaid
-graph LR
-    A[Request] --> B[Authentication: ~5ms]
-    B --> C[Business Logic: ~10ms]
-    C --> D[Database Query: ~15ms]
-    D --> E[Response: ~2ms]
-    E --> F[Total: ~32ms]
-```
-
----
-
-## 🐳 Docker Support
-
-### Dockerfile
-
-```dockerfile
-FROM openjdk:17-jdk-slim
-
-WORKDIR /app
-
-COPY target/popcorn-api-*.jar app.jar
-
-EXPOSE 8080
-
-ENTRYPOINT ["java", "-jar", "app.jar"]
-```
-
-### Docker Compose
-
-```yaml
-version: '3.8'
-services:
-  popcorn-api:
-    build: .
-    ports:
-      - "8080:8080"
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-    depends_on:
-      - mysql
-    
-  mysql:
-    image: mysql:8.0
-    environment:
-      - MYSQL_ROOT_PASSWORD=rootpassword
-      - MYSQL_DATABASE=popcorn_db
-      - MYSQL_USER=popcorn_user
-      - MYSQL_PASSWORD=password
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-
-volumes:
-  mysql_data:
-```
-
-### Running with Docker
-
-```bash
-# Build and run with Docker Compose
-docker-compose up --build
-
-# Run in detached mode
-docker-compose up -d
-
-# Stop services
-docker-compose down
-```
-
----
-
-## 🤝 Contributing
-
-We welcome contributions to PopcornAPI! Here's how you can help:
-
-### 🌟 Ways to Contribute
-
-- 🐛 **Bug Reports**: Found a bug? [Open an issue](https://github.com/Prahlad-7/PopcornAPI/issues)
-- 💡 **Feature Requests**: Have an idea? [Suggest a feature](https://github.com/Prahlad-7/PopcornAPI/issues)
-- 📝 **Documentation**: Improve our docs
-- 🔧 **Code**: Submit pull requests
-
-### 🔄 Development Workflow
-
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request
-
-### 📋 Contribution Guidelines
-
-- Follow Java coding standards
-- Write comprehensive tests
-- Update documentation
-- Ensure all tests pass
-- Keep commits atomic and well-described
-
-### 👥 Contributors
-
-<div align="center">
-
-[![Contributors](https://contrib.rocks/image?repo=your-username/PopcornAPI)](https://github.com/your-username/PopcornAPI/graphs/contributors)
-
-</div>
-
----
-
-## 📞 Support & Community
-
-<div align="center">
-
-[![GitHub Discussions](https://img.shields.io/badge/GitHub-Discussions-181717?style=for-the-badge&logo=github)](https://github.com/your-username/PopcornAPI/discussions)
-[![Issues](https://img.shields.io/github/issues/your-username/PopcornAPI?style=for-the-badge)](https://github.com/your-username/PopcornAPI/issues)
-[![Stack Overflow](https://img.shields.io/badge/Stack%20Overflow-popcorn--api-orange?style=for-the-badge&logo=stackoverflow)](https://stackoverflow.com/questions/tagged/popcorn-api)
-
-</div>
-
-### 📧 Contact
-
-- **Email**: prahlady444@gmail.com
-- **LinkedIn**: [ LinkedIn](https://www.linkedin.com/in/prahlad-yadav-478040257/)
-- **Twitter**: [@prahlad-07](https://twitter.com/your_handle)
-
----
-
-## 📄 License
-
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
-
-```
-MIT License
-
-Copyright (c) 2024 PopcornAPI
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-```
-
----
-
-<div align="center">
-
-## 🎬 Ready to manage movies like a pro? 🍿
-
-**[⭐ Star this repo](https://github.com/your-username/PopcornAPI)** • **[🍴 Fork it](https://github.com/your-username/PopcornAPI/fork)** • **[📖 Read the docs](https://github.com/your-username/PopcornAPI/wiki)**
-
-### Made with ❤️ and lots of ☕
-
-**Happy Coding!** 🚀
-
----
-
-*PopcornAPI - Making movie management a blockbuster experience!*
-
-</div>
